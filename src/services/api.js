@@ -37,6 +37,17 @@ async function fetchPNCPData(filters = {}) {
     const isComprasGov = item.usuarioNome?.toLowerCase().includes('compras.gov') || 
                          item.linkSistemaOrigem?.toLowerCase().includes('compras.gov');
 
+    // Mapear situacaoCompraNome oficial do PNCP ("Divulgada no PNCP") para status "Aberto"
+    let statusFormatado = 'Aberto';
+    if (item.situacaoCompraNome) {
+      const situacaoLower = item.situacaoCompraNome.toLowerCase();
+      if (situacaoLower.includes('divulgada') || situacaoLower.includes('proposta') || situacaoLower.includes('abert')) {
+        statusFormatado = 'Aberto';
+      } else {
+        statusFormatado = item.situacaoCompraNome;
+      }
+    }
+
     return {
       id: `pncp-${item.numeroControlePNCP || item.sequencialCompra || idx}`,
       numeroControlePNCP: item.numeroControlePNCP || 'N/A',
@@ -48,7 +59,8 @@ async function fetchPNCPData(filters = {}) {
       modoDisputa: item.modoDisputaNome || 'Não informado',
       amparoLegal: item.amparoLegal?.nome || item.amparoLegal?.descricao || 'Lei 14.133/2021',
       processo: item.processo || item.numeroCompra || 'N/A',
-      status: item.situacaoCompraNome || 'Aberto',
+      status: statusFormatado,
+      situacaoOriginal: item.situacaoCompraNome || 'Divulgada no PNCP',
       dataAbertura: item.dataAberturaProposta || item.dataPublicacaoPncp || new Date().toISOString(),
       dataEncerramento: item.dataEncerramentoProposta || null,
       valorEstimado: parseFloat(item.valorTotalEstimado || 0),

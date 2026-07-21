@@ -40,7 +40,7 @@ export default function App() {
     keyword: '',
     estado: '',
     modalidade: '',
-    status: 'Aberto',
+    status: '',
     fonte: '',
     dataAbertura: ''
   });
@@ -83,7 +83,7 @@ export default function App() {
       keyword: '',
       estado: '',
       modalidade: '',
-      status: 'Aberto',
+      status: '',
       fonte: '',
       dataAbertura: ''
     });
