@@ -10,26 +10,32 @@ function formatarDataYYYYMMDD(data) {
 // Função para buscar dados reais de licitações no PNCP
 async function fetchPNCPData(filters = {}) {
   const hoje = new Date();
-  // Janela ideal de 7 dias no futuro para resposta ultra-rápida do banco do governo
-  const seteDiasNoFuturo = new Date(hoje.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const dataFinalStr = formatarDataYYYYMMDD(seteDiasNoFuturo);
+  // Janela justa de 3 dias no futuro para garantir resposta leve e rápida do governo
+  const tresDiasNoFuturo = new Date(hoje.getTime() + 3 * 24 * 60 * 60 * 1000);
+  const dataFinalStr = formatarDataYYYYMMDD(tresDiasNoFuturo);
 
   let response;
 
   // 1ª Tentativa: Serverless Function da Vercel (/api/pncp)
   try {
-    response = await fetch(`/api/pncp?dataFinal=${dataFinalStr}&pagina=1&tamanhoPagina=50`, {
+    const params = new URLSearchParams({
+      dataFinal: dataFinalStr,
+      pagina: '1',
+      tamanhoPagina: '30'
+    });
+    if (filters.estado) params.set('uf', filters.estado);
+
+    response = await fetch(`/api/pncp?${params.toString()}`, {
       headers: { 'accept': 'application/json' }
     });
   } catch (err) {
-    console.warn("Falha de rede na função serverless /api/pncp");
+    console.warn("Falha na chamada serverless /api/pncp");
   }
 
-  // Se a serverless der 504 (timeout) ou não responder OK, tenta o proxy direto do Vercel Rewrites
+  // Fallback: Proxy direto
   if (!response || !response.ok) {
-    console.warn("Serverless /api/pncp não retornou 200 (Status: " + (response ? response.status : 'offline') + "). Usando proxy direto Vercel /api-pncp...");
-    
-    const urlDirect = `/api-pncp/v1/contratacoes/proposta?dataFinal=${dataFinalStr}&pagina=1&tamanhoPagina=50`;
+    console.warn("Serverless não respondeu OK. Usando proxy direto /api-pncp...");
+    const urlDirect = `/api-pncp/v1/contratacoes/proposta?dataFinal=${dataFinalStr}&pagina=1&tamanhoPagina=30`;
     try {
       response = await fetch(urlDirect, {
         headers: { 'accept': 'application/json' }

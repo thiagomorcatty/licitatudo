@@ -1,7 +1,7 @@
 // Vercel Serverless Function - Proxy oficial para o PNCP
 
 export const config = {
-  maxDuration: 15, // aumenta o tempo limite se disponível na Vercel
+  maxDuration: 15,
 };
 
 export default async function handler(req, res) {
@@ -12,18 +12,12 @@ export default async function handler(req, res) {
   const hoje = new Date();
   const fmt = (d) => d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
 
-  // Função auxiliar para chamar o PNCP com timeout interno de 7 segundos
-  const fetchWithTimeout = async (dataFinal, pagina = '1', tamanho = '50') => {
+  const fetchWithTimeout = async (paramsObj, timeoutMs = 8000) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 7000); // 7 segundos
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const params = new URLSearchParams({
-      dataFinal: dataFinal,
-      pagina: pagina,
-      tamanhoPagina: tamanho
-    });
-
-    const pncpUrl = `https://pncp.gov.br/api/consulta/v1/contratacoes/proposta?${params.toString()}`;
+    const searchParams = new URLSearchParams(paramsObj);
+    const pncpUrl = `https://pncp.gov.br/api/consulta/v1/contratacoes/proposta?${searchParams.toString()}`;
 
     try {
       const response = await fetch(pncpUrl, {
@@ -42,44 +36,51 @@ export default async function handler(req, res) {
   };
 
   try {
-    let dataFinalParam = req.query.dataFinal;
+    const tresDias = fmt(new Date(hoje.getTime() + 3 * 24 * 60 * 60 * 1000));
+    
+    // Filtros justos e diretos
+    const queryParams = {
+      dataFinal: req.query.dataFinal || tresDias,
+      pagina: req.query.pagina || '1',
+      tamanhoPagina: req.query.tamanhoPagina || '30'
+    };
 
-    // Se não passou dataFinal, pega 7 dias no futuro (janela ideal rápida)
-    if (!dataFinalParam) {
-      dataFinalParam = fmt(new Date(hoje.getTime() + 7 * 24 * 60 * 60 * 1000));
+    if (req.query.codigoModalidadeContratacao) {
+      queryParams.codigoModalidadeContratacao = req.query.codigoModalidadeContratacao;
+    }
+    if (req.query.uf) {
+      queryParams.ufSigla = req.query.uf;
     }
 
     let pncpResponse;
 
     try {
-      // Primeira tentativa com o parâmetro recebido
-      pncpResponse = await fetchWithTimeout(dataFinalParam, req.query.pagina || '1', req.query.tamanhoPagina || '50');
+      pncpResponse = await fetchWithTimeout(queryParams, 8000);
     } catch (e1) {
-      console.warn("Primeira tentativa no PNCP estourou tempo (timeout). Tentando janela curta de 7 dias...");
-      // Se estourar o tempo (timeout), tenta com janela rápida de 7 dias no futuro
-      const dataSeteDias = fmt(new Date(hoje.getTime() + 7 * 24 * 60 * 60 * 1000));
-      pncpResponse = await fetchWithTimeout(dataSeteDias, '1', '50');
+      console.warn("Primeira busca estourou tempo (timeout). Aplicando filtro por Pregão Eletrônico (codigoModalidadeContratacao=8)...");
+      queryParams.codigoModalidadeContratacao = '8'; // Pregão Eletrônico
+      queryParams.tamanhoPagina = '20';
+      pncpResponse = await fetchWithTimeout(queryParams, 8000);
     }
 
     const textResponse = await pncpResponse.text();
 
     if (!pncpResponse.ok) {
-      console.error("PNCP respondeu com status de erro:", pncpResponse.status);
       return res.status(pncpResponse.status).json({
-        error: "Falha ao obter resposta do PNCP",
+        error: "Falha na consulta ao PNCP",
         upstreamStatus: pncpResponse.status,
         upstreamMessage: textResponse.substring(0, 300)
       });
     }
 
     const data = JSON.parse(textResponse);
-    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+    res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300');
     return res.status(200).json(data);
 
   } catch (error) {
-    console.error("Erro interno/timeout no PNCP Proxy:", error);
+    console.error("Erro no PNCP Proxy:", error.message);
     return res.status(504).json({
-      error: "O servidor do PNCP demorou muito para responder (Timeout).",
+      error: "O servidor do PNCP demorou muito para responder.",
       details: error.message
     });
   }
