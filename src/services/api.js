@@ -10,41 +10,49 @@ function formatarDataYYYYMMDD(data) {
 // Função para buscar dados reais de licitações no PNCP
 async function fetchPNCPData(filters = {}) {
   const hoje = new Date();
-  const trintaDiasNoFuturo = new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const dataFinalStr = formatarDataYYYYMMDD(trintaDiasNoFuturo);
+  // Janela ideal de 7 dias no futuro para resposta ultra-rápida do banco do governo
+  const seteDiasNoFuturo = new Date(hoje.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const dataFinalStr = formatarDataYYYYMMDD(seteDiasNoFuturo);
 
   let response;
 
-  // Tenta primeiro a Serverless Function do Vercel (/api/pncp), que roda no servidor de forma super resiliente
+  // 1ª Tentativa: Serverless Function da Vercel (/api/pncp)
   try {
     response = await fetch(`/api/pncp?dataFinal=${dataFinalStr}&pagina=1&tamanhoPagina=50`, {
       headers: { 'accept': 'application/json' }
     });
   } catch (err) {
-    console.warn("Falha no endpoint serverless /api/pncp, tentando proxy direto /api-pncp...");
+    console.warn("Falha de rede na função serverless /api/pncp");
   }
 
-  // Se a rota serverless não existir (ex: dev local puro sem vercel serverless), usa o proxy /api-pncp/v1/contratacoes/proposta
+  // Se a serverless der 504 (timeout) ou não responder OK, tenta o proxy direto do Vercel Rewrites
   if (!response || !response.ok) {
-    const url = `/api-pncp/v1/contratacoes/proposta?dataFinal=${dataFinalStr}&pagina=1&tamanhoPagina=50`;
-    response = await fetch(url, {
-      headers: { 'accept': 'application/json' }
-    });
+    console.warn("Serverless /api/pncp não retornou 200 (Status: " + (response ? response.status : 'offline') + "). Usando proxy direto Vercel /api-pncp...");
+    
+    const urlDirect = `/api-pncp/v1/contratacoes/proposta?dataFinal=${dataFinalStr}&pagina=1&tamanhoPagina=50`;
+    try {
+      response = await fetch(urlDirect, {
+        headers: { 'accept': 'application/json' }
+      });
+    } catch (e) {
+      console.error("Falha também no proxy direto:", e);
+    }
   }
 
-  if (!response.ok) {
+  if (!response || !response.ok) {
     let errorDetail = "";
-    try {
-      const errJson = await response.json();
-      errorDetail = errJson.upstreamMessage || errJson.details || errJson.error || "";
-    } catch(e) {}
-
-    if (response.status === 500) {
-      throw new Error(`Erro intermediário do servidor (500). ${errorDetail}`);
-    } else if (response.status === 502) {
-      throw new Error(`O servidor não conseguiu obter resposta do PNCP (502 Gateway). ${errorDetail}`);
+    if (response) {
+      try {
+        const errJson = await response.json();
+        errorDetail = errJson.details || errJson.upstreamMessage || errJson.error || "";
+      } catch(e) {}
     }
-    throw new Error(`Servidor PNCP respondeu com código ${response.status} (${response.statusText})`);
+
+    const statusStr = response ? response.status : 'Timeout';
+    if (statusStr === 504) {
+      throw new Error("O servidor oficial do PNCP demorou para responder (Timeout 504). O portal do governo pode estar sobrecarregado no momento. Tente novamente em instantes.");
+    }
+    throw new Error(`Falha na conexão com os servidores do PNCP (Código ${statusStr}). ${errorDetail}`);
   }
 
   const result = await response.json();
