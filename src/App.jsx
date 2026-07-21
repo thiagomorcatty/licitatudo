@@ -32,6 +32,7 @@ export default function App() {
   const [licitacoes, setLicitacoes] = useState([]);
   const [savedItems, setSavedItems] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -59,11 +60,14 @@ export default function App() {
   const handleSearch = async (e) => {
     if (e) e.preventDefault();
     setLoading(true);
+    setErrorMessage(null);
     try {
       const data = await fetchLicitacoes(filters);
       setLicitacoes(data);
     } catch (error) {
       console.error("Erro ao buscar licitações:", error);
+      setErrorMessage(error.message || "Erro de conexão ao consultar as APIs oficiais.");
+      setLicitacoes([]);
     } finally {
       setLoading(false);
     }
@@ -419,8 +423,22 @@ export default function App() {
               {loading ? (
                 <div className="py-16 flex flex-col items-center justify-center text-slate-500 bg-white rounded-3xl border border-slate-100">
                   <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mb-4" />
-                  <p className="font-semibold text-slate-700">Consultando APIs do PNCP e Compras.gov.br...</p>
-                  <p className="text-xs text-slate-400 mt-1">Filtrando edital por especificações</p>
+                  <p className="font-semibold text-slate-700">Consultando APIs oficiais (PNCP e Compras.gov.br)...</p>
+                  <p className="text-xs text-slate-400 mt-1">Carregando apenas licitações reais em tempo real</p>
+                </div>
+              ) : errorMessage ? (
+                <div className="bg-rose-50 border border-rose-200 rounded-3xl p-8 text-center flex flex-col items-center">
+                  <div className="p-3 bg-rose-100 text-rose-600 rounded-2xl mb-3">
+                    <AlertCircle size={36} />
+                  </div>
+                  <h3 className="text-lg font-bold text-rose-900 mb-1">Falha na Conexão com as APIs Oficiais</h3>
+                  <p className="text-rose-700 max-w-lg text-sm mb-6 leading-relaxed">{errorMessage}</p>
+                  <button 
+                    onClick={() => handleSearch()} 
+                    className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-sm transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+                  >
+                    <RefreshCw size={16} /> Tentar Novamente
+                  </button>
                 </div>
               ) : licitacoes.length > 0 ? (
                 <div className="space-y-4">
