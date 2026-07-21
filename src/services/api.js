@@ -1,111 +1,77 @@
-// Serviço de integração com as APIs de Licitações Oficiais (PNCP e Compras.gov.br)
+// Serviço de integração oficial com a API de Licitações do PNCP (Portal Nacional de Contratações Públicas)
 
-// Função auxiliar para buscar no PNCP
-async function fetchPNCPData(filters) {
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, '0');
-  const dataInicial = `${yyyy}${mm}01`;
-
-  const url = `/api-pncp/api/consulta/v1/contratacoes/proposta?dataInicial=${dataInicial}&pagina=1&tamanhoPagina=20`;
-  
-  const response = await fetch(url, { 
-    headers: { 'accept': 'application/json' } 
-  });
-
-  if (!response.ok) {
-    throw new Error(`PNCP API respondeu com status ${response.status} (${response.statusText})`);
-  }
-
-  const result = await response.json();
-  const data = result.data || result;
-  if (!Array.isArray(data)) {
-    throw new Error("Formato de resposta inválido retornado pela API do PNCP");
-  }
-
-  return data.map((item, idx) => ({
-    id: `pncp-real-${item.numeroItem || item.sequencialContratacao || idx}`,
-    orgao: item.orgaoEntidade?.razaoSocial || item.orgaoSubrogado?.razaoSocial || 'Órgão Público (PNCP)',
-    objeto: item.objetoCompra || item.descricao || 'Objeto não especificado no registro do PNCP',
-    modalidade: item.modalidadeNome || item.modalidadeContratacaoNome || 'Pregão Eletrônico',
-    status: 'Aberto',
-    dataAbertura: item.dataAberturaProposta || item.dataPublicacaoPncp || new Date().toISOString(),
-    valorEstimado: parseFloat(item.valorTotalEstimado || item.valorEstimado || 0),
-    cidade: item.unidadeOrgao?.municipioNome || 'Não informada',
-    estado: item.unidadeOrgao?.ufSigla || 'BR',
-    linkEdital: item.linkSistemaOrigem || `https://pncp.gov.br/app/editais`,
-    fonte: 'PNCP'
-  }));
+function formatarDataYYYYMMDD(data) {
+  const yyyy = data.getFullYear();
+  const mm = String(data.getMonth() + 1).padStart(2, '0');
+  const dd = String(data.getDate()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}`;
 }
 
-// Função auxiliar para buscar no Compras.gov.br
-async function fetchComprasGovData(filters) {
-  const url = `/api-comprasgov/modulo-legado/api/v1/licitacoes?tamanhoPagina=20`;
-  
-  const response = await fetch(url, { 
-    headers: { 'accept': 'application/json' } 
+// Função para buscar dados reais de licitações no PNCP
+async function fetchPNCPData(filters = {}) {
+  const hoje = new Date();
+  const trintaDiasAtras = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const dataInicial = formatarDataYYYYMMDD(trintaDiasAtras);
+  const dataFinal = formatarDataYYYYMMDD(hoje);
+
+  // Endpoint oficial do PNCP para consulta de contratações/propostas abertas
+  const url = `/api-pncp/api/consulta/v1/contratacoes/proposta?dataInicial=${dataInicial}&dataFinal=${dataFinal}&pagina=1&tamanhoPagina=50`;
+
+  const response = await fetch(url, {
+    headers: { 'accept': 'application/json' }
   });
 
   if (!response.ok) {
-    throw new Error(`Compras.gov.br API respondeu com status ${response.status} (${response.statusText})`);
+    throw new Error(`Servidor PNCP respondeu com código ${response.status} (${response.statusText})`);
   }
 
   const result = await response.json();
-  const items = result._embedded?.licitacoes || result.resultado || [];
+  const items = result.data || result;
+
   if (!Array.isArray(items)) {
-    throw new Error("Formato de resposta inválido retornado pela API do Compras.gov.br");
+    throw new Error("Resposta inválida da API do PNCP. O formato de dados recebido não é uma lista.");
   }
 
-  return items.map((item, idx) => ({
-    id: `compras-real-${item.id || idx}`,
-    orgao: item.orgao_emissor || item.nome_orgao || 'Governo Federal (Compras.gov.br)',
-    objeto: item.objeto || 'Licitação registrada no Compras.gov.br',
-    modalidade: item.modalidade_licitacao || 'Pregão Eletrônico',
-    status: 'Aberto',
-    dataAbertura: item.data_abertura_proposta || new Date().toISOString(),
-    valorEstimado: parseFloat(item.valor_estimado || 0),
-    cidade: item.municipio || 'Capital',
-    estado: item.uf || 'DF',
-    linkEdital: item.link_edital || 'https://compras.gov.br',
-    fonte: 'Compras.gov.br'
-  }));
+  return items.map((item, idx) => {
+    const isComprasGov = item.usuarioNome?.toLowerCase().includes('compras.gov') || 
+                         item.linkSistemaOrigem?.toLowerCase().includes('compras.gov');
+
+    return {
+      id: `pncp-${item.numeroControlePNCP || item.sequencialCompra || idx}`,
+      numeroControlePNCP: item.numeroControlePNCP || 'N/A',
+      cnpjOrgao: item.orgaoEntidade?.cnpj || 'N/A',
+      orgao: item.orgaoEntidade?.razaoSocial || item.orgaoSubrogado?.razaoSocial || 'Órgão Público',
+      unidadeOrgao: item.unidadeOrgao?.nomeUnidade || '',
+      objeto: item.objetoCompra || item.descricao || 'Objeto de licitação registrado no portal oficial',
+      modalidade: item.modalidadeNome || item.tipoInstrumentoConvocatorioNome || 'Pregão Eletrônico',
+      modoDisputa: item.modoDisputaNome || 'Não informado',
+      amparoLegal: item.amparoLegal?.nome || item.amparoLegal?.descricao || 'Lei 14.133/2021',
+      processo: item.processo || item.numeroCompra || 'N/A',
+      status: item.situacaoCompraNome || 'Aberto',
+      dataAbertura: item.dataAberturaProposta || item.dataPublicacaoPncp || new Date().toISOString(),
+      dataEncerramento: item.dataEncerramentoProposta || null,
+      valorEstimado: parseFloat(item.valorTotalEstimado || 0),
+      cidade: item.unidadeOrgao?.municipioNome || 'Não informada',
+      estado: item.unidadeOrgao?.ufSigla || 'BR',
+      linkEdital: item.linkSistemaOrigem || item.linkProcessoEletronico || `https://pncp.gov.br/app/editais`,
+      fonte: isComprasGov ? 'Compras.gov.br' : (item.usuarioNome || 'PNCP')
+    };
+  });
 }
 
 export async function fetchLicitacoes(filters = {}) {
-  const promises = [];
-  const fontesSolicitadas = [];
-
-  const buscarPNCP = !filters.fonte || filters.fonte === 'PNCP';
-  const buscarCompras = !filters.fonte || filters.fonte === 'Compras.gov.br';
-
-  if (buscarPNCP) {
-    promises.push(fetchPNCPData(filters));
-    fontesSolicitadas.push('PNCP');
-  }
-
-  if (buscarCompras) {
-    promises.push(fetchComprasGovData(filters));
-    fontesSolicitadas.push('Compras.gov.br');
-  }
-
-  const results = await Promise.allSettled(promises);
-
   let realResults = [];
-  let errorsEncountered = [];
 
-  results.forEach((res, index) => {
-    if (res.status === 'fulfilled') {
-      realResults = realResults.concat(res.value);
-    } else {
-      errorsEncountered.push(`${fontesSolicitadas[index]}: ${res.reason?.message || 'Falha de conexão'}`);
-    }
-  });
+  try {
+    realResults = await fetchPNCPData(filters);
+  } catch (err) {
+    console.error("Erro ao consultar PNCP:", err);
+    throw new Error(`Falha ao conectar com o Portal Nacional de Contratações Públicas (PNCP): ${err.message}`);
+  }
 
-  // Se NENHUMA API respondeu com sucesso e erros foram encontrados, lança a exceção para exibição da mensagem no frontend
-  if (realResults.length === 0 && errorsEncountered.length > 0) {
-    throw new Error(
-      `Não foi possível consultar os portais oficiais. Detalhes: ${errorsEncountered.join(' | ')}`
-    );
+  if (!realResults || realResults.length === 0) {
+    throw new Error("Nenhuma licitação ativa foi retornada pelos servidores oficiais no período consultado.");
   }
 
   // Filtrar apenas dados reais recebidos
@@ -144,4 +110,5 @@ export async function fetchLicitacoes(filters = {}) {
     return match;
   });
 }
+
 

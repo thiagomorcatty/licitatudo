@@ -219,10 +219,13 @@ export default function App() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Órgão Publicador</h3>
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Órgão Publicador & CNPJ</h3>
                 <p className="text-slate-800 font-semibold text-sm flex items-center gap-2">
                   <Building size={18} className="text-blue-600 shrink-0"/> {selectedItem.orgao}
                 </p>
+                {selectedItem.cnpjOrgao && selectedItem.cnpjOrgao !== 'N/A' && (
+                  <p className="text-xs text-slate-500 mt-1 pl-6">CNPJ: <span className="font-mono">{selectedItem.cnpjOrgao}</span></p>
+                )}
               </div>
 
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
@@ -230,6 +233,9 @@ export default function App() {
                 <p className="text-slate-800 font-semibold text-sm flex items-center gap-2">
                   <MapPin size={18} className="text-blue-600 shrink-0"/> {selectedItem.cidade} - {selectedItem.estado}
                 </p>
+                {selectedItem.unidadeOrgao && (
+                  <p className="text-xs text-slate-500 mt-1 pl-6 truncate">{selectedItem.unidadeOrgao}</p>
+                )}
               </div>
 
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
@@ -237,14 +243,39 @@ export default function App() {
                 <p className="text-slate-800 font-semibold text-sm flex items-center gap-2">
                   <Calendar size={18} className="text-blue-600 shrink-0"/> {formatarData(selectedItem.dataAbertura)}
                 </p>
+                {selectedItem.dataEncerramento && (
+                  <p className="text-xs text-amber-700 mt-1 pl-6">Encerramento: {formatarData(selectedItem.dataEncerramento)}</p>
+                )}
               </div>
 
               <div className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-100">
-                <h3 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">Valor Estimado</h3>
+                <h3 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">Valor Estimado Total</h3>
                 <p className="text-emerald-700 font-extrabold text-lg flex items-center gap-1.5">
                   <DollarSign size={20} /> {formatarMoeda(selectedItem.valorEstimado)}
                 </p>
               </div>
+
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div>
+                  <span className="font-bold text-slate-400 uppercase block mb-1">Processo / Nº Compra</span>
+                  <span className="font-mono text-slate-800 font-bold">{selectedItem.processo}</span>
+                </div>
+                <div>
+                  <span className="font-bold text-slate-400 uppercase block mb-1">Modo de Disputa</span>
+                  <span className="text-slate-800 font-bold">{selectedItem.modoDisputa}</span>
+                </div>
+                <div>
+                  <span className="font-bold text-slate-400 uppercase block mb-1">Amparo Legal</span>
+                  <span className="text-slate-800 font-semibold truncate block" title={selectedItem.amparoLegal}>{selectedItem.amparoLegal}</span>
+                </div>
+              </div>
+
+              {selectedItem.numeroControlePNCP && selectedItem.numeroControlePNCP !== 'N/A' && (
+                <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 md:col-span-2 flex items-center justify-between text-xs text-blue-900">
+                  <span className="font-semibold">Nº de Controle Oficial PNCP:</span>
+                  <span className="font-mono font-extrabold text-blue-700">{selectedItem.numeroControlePNCP}</span>
+                </div>
+              )}
             </div>
           </div>
 
