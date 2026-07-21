@@ -15,8 +15,8 @@ async function fetchPNCPData(filters = {}) {
   const dataInicial = formatarDataYYYYMMDD(trintaDiasAtras);
   const dataFinal = formatarDataYYYYMMDD(hoje);
 
-  // Endpoint oficial do PNCP para consulta de contratações/propostas abertas
-  const url = `/api-pncp/api/consulta/v1/contratacoes/proposta?dataInicial=${dataInicial}&dataFinal=${dataFinal}&pagina=1&tamanhoPagina=50`;
+  // Ampliando para buscar 200 registros mais recentes para ter uma boa base de filtragem local
+  const url = `/api-pncp/api/consulta/v1/contratacoes/proposta?dataInicial=${dataInicial}&dataFinal=${dataFinal}&pagina=1&tamanhoPagina=200`;
 
   const response = await fetch(url, {
     headers: { 'accept': 'application/json' }
@@ -90,13 +90,23 @@ export async function fetchLicitacoes(filters = {}) {
   return realResults.filter(item => {
     let match = true;
 
-    // Filtro por palavra-chave (pesquisa em Objeto, Órgão e Cidade)
+    // Filtro inteligente por palavras-chave com condição "OU" (separado por vírgula ou espaço)
     if (filters.keyword && filters.keyword.trim() !== '') {
-      const query = filters.keyword.toLowerCase().trim();
-      const matchObjeto = item.objeto.toLowerCase().includes(query);
-      const matchOrgao = item.orgao.toLowerCase().includes(query);
-      const matchCidade = item.cidade.toLowerCase().includes(query);
-      if (!matchObjeto && !matchOrgao && !matchCidade) match = false;
+      // Separa os termos pela vírgula
+      const termos = filters.keyword
+        .toLowerCase()
+        .split(',')
+        .map(t => t.trim())
+        .filter(t => t.length > 0);
+      
+      const textoParaBusca = `${item.objeto} ${item.orgao} ${item.cidade}`.toLowerCase();
+      
+      // Verifica se o texto da licitação inclui PELO MENOS UM dos termos buscados
+      const possuiMatch = termos.some(termo => textoParaBusca.includes(termo));
+      
+      if (!possuiMatch) {
+        match = false;
+      }
     }
 
     // Filtro por Estado (UF)

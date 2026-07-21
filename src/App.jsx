@@ -37,7 +37,7 @@ export default function App() {
   const [showFilters, setShowFilters] = useState(false);
 
   const [filters, setFilters] = useState({
-    keyword: '',
+    keyword: 'software, robótica, didático, oficina, tecnologia',
     estado: '',
     modalidade: '',
     status: '',
@@ -80,7 +80,7 @@ export default function App() {
 
   const handleClearFilters = () => {
     setFilters({
-      keyword: '',
+      keyword: 'software, robótica, didático, oficina, tecnologia',
       estado: '',
       modalidade: '',
       status: '',
