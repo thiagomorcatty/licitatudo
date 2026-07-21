@@ -8,7 +8,7 @@ export default defineConfig({
     open: true,
     proxy: {
       '/api-pncp': {
-        target: 'https://pncp.gov.br',
+        target: 'https://pncp.gov.br/api/consulta',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api-pncp/, ''),

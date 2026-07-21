@@ -10,45 +10,39 @@ function formatarDataYYYYMMDD(data) {
 // Função para buscar dados reais de licitações no PNCP
 async function fetchPNCPData(filters = {}) {
   const hoje = new Date();
+  const trintaDiasNoFuturo = new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const dataFinalStr = formatarDataYYYYMMDD(trintaDiasNoFuturo);
 
-  // Para o endpoint /contratacoes/proposta:
-  // dataInicial = HOJE
-  // dataFinal = X dias no FUTURO (janela de encerramento das propostas)
-  const buscaComDias = async (diasNoFuturo) => {
-    const dataFim = new Date(hoje.getTime() + diasNoFuturo * 24 * 60 * 60 * 1000);
-    const dataInicial = formatarDataYYYYMMDD(hoje);
-    const dataFinal = formatarDataYYYYMMDD(dataFim);
+  let response;
 
-    const url = `/api-pncp/api/consulta/v1/contratacoes/proposta?dataInicial=${dataInicial}&dataFinal=${dataFinal}&pagina=1&tamanhoPagina=50`;
-
-    const response = await fetch(url, {
+  // Tenta primeiro a Serverless Function do Vercel (/api/pncp), que roda no servidor de forma super resiliente
+  try {
+    response = await fetch(`/api/pncp?dataFinal=${dataFinalStr}&pagina=1&tamanhoPagina=50`, {
       headers: { 'accept': 'application/json' }
     });
-
-    return { response, status: response.status };
-  };
-
-  let resObj;
-  try {
-    // Busca oportunidades que encerram nos próximos 30 dias
-    resObj = await buscaComDias(30);
-    if (resObj.status === 500) {
-      console.warn("PNCP 500. Tentando janela de 15 dias no futuro...");
-      resObj = await buscaComDias(15);
-    }
-    if (resObj.status === 500) {
-      console.warn("PNCP 500. Tentando janela de 7 dias no futuro...");
-      resObj = await buscaComDias(7);
-    }
-  } catch (e) {
-    throw new Error(`Não foi possível conectar ao servidor do PNCP: ${e.message}`);
+  } catch (err) {
+    console.warn("Falha no endpoint serverless /api/pncp, tentando proxy direto /api-pncp...");
   }
 
-  const { response } = resObj;
+  // Se a rota serverless não existir (ex: dev local puro sem vercel serverless), usa o proxy /api-pncp/v1/contratacoes/proposta
+  if (!response || !response.ok) {
+    const url = `/api-pncp/v1/contratacoes/proposta?dataFinal=${dataFinalStr}&pagina=1&tamanhoPagina=50`;
+    response = await fetch(url, {
+      headers: { 'accept': 'application/json' }
+    });
+  }
 
   if (!response.ok) {
+    let errorDetail = "";
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.upstreamMessage || errJson.details || errJson.error || "";
+    } catch(e) {}
+
     if (response.status === 500) {
-      throw new Error("O servidor do Portal Nacional de Contratações Públicas (PNCP) está temporariamente indisponível ou em manutenção no momento (Erro 500 no Banco de Dados do Governo). Tente novamente em alguns instantes.");
+      throw new Error(`Erro intermediário do servidor (500). ${errorDetail}`);
+    } else if (response.status === 502) {
+      throw new Error(`O servidor não conseguiu obter resposta do PNCP (502 Gateway). ${errorDetail}`);
     }
     throw new Error(`Servidor PNCP respondeu com código ${response.status} (${response.statusText})`);
   }
