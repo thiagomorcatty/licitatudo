@@ -15,8 +15,8 @@ async function fetchPNCPData(filters = {}) {
   const dataInicial = formatarDataYYYYMMDD(trintaDiasAtras);
   const dataFinal = formatarDataYYYYMMDD(hoje);
 
-  // Ampliando para buscar 200 registros mais recentes para ter uma boa base de filtragem local
-  const url = `/api-pncp/api/consulta/v1/contratacoes/proposta?dataInicial=${dataInicial}&dataFinal=${dataFinal}&pagina=1&tamanhoPagina=200`;
+  // API do PNCP limita a tamanhoPagina a 50
+  const url = `/api-pncp/api/consulta/v1/contratacoes/proposta?dataInicial=${dataInicial}&dataFinal=${dataFinal}&pagina=1&tamanhoPagina=50`;
 
   const response = await fetch(url, {
     headers: { 'accept': 'application/json' }
