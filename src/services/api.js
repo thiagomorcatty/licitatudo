@@ -10,19 +10,46 @@ function formatarDataYYYYMMDD(data) {
 // Função para buscar dados reais de licitações no PNCP
 async function fetchPNCPData(filters = {}) {
   const hoje = new Date();
-  const trintaDiasAtras = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  const dataInicial = formatarDataYYYYMMDD(trintaDiasAtras);
-  const dataFinal = formatarDataYYYYMMDD(hoje);
+  // Para o endpoint /contratacoes/proposta:
+  // dataInicial = HOJE
+  // dataFinal = X dias no FUTURO (janela de encerramento das propostas)
+  const buscaComDias = async (diasNoFuturo) => {
+    const dataFim = new Date(hoje.getTime() + diasNoFuturo * 24 * 60 * 60 * 1000);
+    const dataInicial = formatarDataYYYYMMDD(hoje);
+    const dataFinal = formatarDataYYYYMMDD(dataFim);
 
-  // API do PNCP limita a tamanhoPagina a 50
-  const url = `/api-pncp/api/consulta/v1/contratacoes/proposta?dataInicial=${dataInicial}&dataFinal=${dataFinal}&pagina=1&tamanhoPagina=50`;
+    const url = `/api-pncp/api/consulta/v1/contratacoes/proposta?dataInicial=${dataInicial}&dataFinal=${dataFinal}&pagina=1&tamanhoPagina=50`;
 
-  const response = await fetch(url, {
-    headers: { 'accept': 'application/json' }
-  });
+    const response = await fetch(url, {
+      headers: { 'accept': 'application/json' }
+    });
+
+    return { response, status: response.status };
+  };
+
+  let resObj;
+  try {
+    // Busca oportunidades que encerram nos próximos 30 dias
+    resObj = await buscaComDias(30);
+    if (resObj.status === 500) {
+      console.warn("PNCP 500. Tentando janela de 15 dias no futuro...");
+      resObj = await buscaComDias(15);
+    }
+    if (resObj.status === 500) {
+      console.warn("PNCP 500. Tentando janela de 7 dias no futuro...");
+      resObj = await buscaComDias(7);
+    }
+  } catch (e) {
+    throw new Error(`Não foi possível conectar ao servidor do PNCP: ${e.message}`);
+  }
+
+  const { response } = resObj;
 
   if (!response.ok) {
+    if (response.status === 500) {
+      throw new Error("O servidor do Portal Nacional de Contratações Públicas (PNCP) está temporariamente indisponível ou em manutenção no momento (Erro 500 no Banco de Dados do Governo). Tente novamente em alguns instantes.");
+    }
     throw new Error(`Servidor PNCP respondeu com código ${response.status} (${response.statusText})`);
   }
 
