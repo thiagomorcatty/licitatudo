@@ -10,8 +10,13 @@ function formatarDataYYYYMMDD(data) {
 // Função para buscar dados reais de licitações no PNCP
 async function fetchPNCPData(filters = {}) {
   const hoje = new Date();
-  // Janela justa de 3 dias no futuro para garantir resposta leve e rápida do governo
+  
+  // Limitar a busca a 30 dias atrás até 3 dias no futuro para evitar sobrecarregar o PNCP
+  // Sem dataInicial o servidor dá erro 504 (timeout) ou 500 ao tentar ler toda a base histórica
+  const trintaDiasAtras = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000);
   const tresDiasNoFuturo = new Date(hoje.getTime() + 3 * 24 * 60 * 60 * 1000);
+  
+  const dataInicialStr = formatarDataYYYYMMDD(trintaDiasAtras);
   const dataFinalStr = formatarDataYYYYMMDD(tresDiasNoFuturo);
 
   let response;
@@ -19,9 +24,10 @@ async function fetchPNCPData(filters = {}) {
   // 1ª Tentativa: Serverless Function da Vercel (/api/pncp)
   try {
     const params = new URLSearchParams({
+      dataInicial: dataInicialStr,
       dataFinal: dataFinalStr,
       pagina: '1',
-      tamanhoPagina: '30'
+      tamanhoPagina: '50'
     });
     if (filters.estado) params.set('uf', filters.estado);
 
@@ -35,7 +41,9 @@ async function fetchPNCPData(filters = {}) {
   // Fallback: Proxy direto
   if (!response || !response.ok) {
     console.warn("Serverless não respondeu OK. Usando proxy direto /api-pncp...");
-    const urlDirect = `/api-pncp/v1/contratacoes/proposta?dataFinal=${dataFinalStr}&pagina=1&tamanhoPagina=30`;
+    // Atenção: O Vercel.json já redireciona /api-pncp para https://pncp.gov.br/api/consulta
+    // Logo não devemos colocar /api/consulta na URL aqui!
+    const urlDirect = `/api-pncp/v1/contratacoes/proposta?dataInicial=${dataInicialStr}&dataFinal=${dataFinalStr}&pagina=1&tamanhoPagina=50`;
     try {
       response = await fetch(urlDirect, {
         headers: { 'accept': 'application/json' }
