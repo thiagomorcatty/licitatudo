@@ -36,10 +36,12 @@ export default async function handler(req, res) {
   };
 
   try {
+    const trintaDiasAtras = fmt(new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000));
     const tresDias = fmt(new Date(hoje.getTime() + 3 * 24 * 60 * 60 * 1000));
     
     // Filtros justos e diretos
     const queryParams = {
+      dataInicial: req.query.dataInicial || trintaDiasAtras,
       dataFinal: req.query.dataFinal || tresDias,
       pagina: req.query.pagina || '1',
       tamanhoPagina: req.query.tamanhoPagina || '30'

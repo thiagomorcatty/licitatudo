@@ -34,8 +34,15 @@ async function fetchPNCPData(filters = {}) {
     response = await fetch(`/api/pncp?${params.toString()}`, {
       headers: { 'accept': 'application/json' }
     });
+    
+    // No ambiente local (Vite), a chamada pode retornar o arquivo .js em vez de executar.
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      throw new Error("Resposta não é JSON (possivelmente ambiente local servindo o arquivo).");
+    }
   } catch (err) {
-    console.warn("Falha na chamada serverless /api/pncp");
+    console.warn(`Falha na chamada serverless /api/pncp: ${err.message}`);
+    response = null; // Garante que o fallback seja acionado
   }
 
   // Fallback: Proxy direto
